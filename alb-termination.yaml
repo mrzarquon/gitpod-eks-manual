@@ -1,0 +1,15 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: https-certificates
+spec:
+  dnsNames:
+  - 'gitpod.lab.angrydome.org'
+  - '*.gitpod.lab.angrydome.org'
+  - '*.gitpod.lab.angrydome.org'
+  duration: 4380h0m0s
+  issuerRef:
+    group: cert-manager.io
+    kind: Issuer
+    name: ca-issuer
+  secretName: https-certificates

@@ -1,0 +1,172 @@
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+metadata:
+  name: angrydome
+  region: eu-west-1
+  version: "1.22"
+  tags:
+    team: "cx"
+    project: "gitpod manual deploy"
+
+iam:
+  withOIDC: true
+
+  serviceAccounts:
+    - metadata:
+        name: aws-load-balancer-controller
+        namespace: kube-system
+      wellKnownPolicies:
+        awsLoadBalancerController: true
+    - metadata:
+        name: ebs-csi-controller-sa
+        namespace: kube-system
+      wellKnownPolicies:
+        ebsCSIController: true
+    - metadata:
+        name: cluster-autoscaler
+        namespace: kube-system
+      wellKnownPolicies:
+        autoScaler: true
+    - metadata:
+        name: external-dns
+        namespace: external-dns
+      wellKnownPolicies:
+        externalDNS: true
+    - metadata:
+        name: cert-manager
+        namespace: cert-manager
+      wellKnownPolicies:
+        certManager: true
+
+availabilityZones:
+  - eu-west-1a
+  - eu-west-1b
+  - eu-west-1c
+
+# By default we create a dedicated VPC for the cluster
+# You can use an existing VPC by supplying private and/or public subnets. Please check
+# https://eksctl.io/usage/vpc-networking/#use-existing-vpc-other-custom-configuration
+vpc:
+  autoAllocateIPv6: false
+  nat:
+    # For production environments user HighlyAvailable
+    # https://eksctl.io/usage/vpc-networking/#nat-gateway
+    gateway: Single
+
+# Enable EKS control plane logging
+# https://docs.aws.amazon.com/eks/latest/userguide/control-plane-logs.html
+cloudWatch:
+  clusterLogging:
+    enableTypes: ["*"]
+
+privateCluster:
+  enabled: false
+  additionalEndpointServices:
+    - "autoscaling"
+    - "logs"
+
+managedNodeGroups:
+  - name: workspaces
+    desiredCapacity: 1
+    minSize: 1
+    maxSize: 10
+    # because of AWS addons
+    disableIMDSv1: false
+    # Please configure the size of the volume and additional features
+    # https://eksctl.io/usage/schema/#nodeGroups-volumeType
+    # https://aws.amazon.com/es/ebs/pricing/
+    volumeSize: 300
+    volumeType: gp3
+    volumeIOPS: 6000
+    volumeThroughput: 500
+    ebsOptimized: true
+    maxPodsPerNode: 110
+    ssh:
+      enableSsm: true
+    # Use private subnets for nodes
+    # https://eksctl.io/usage/vpc-networking/#use-private-subnets-for-initial-nodegroup
+    privateNetworking: true
+    # ami: ami-009935ddbb32a7f3c
+    # ami: ami-09085319fb5008f46
+
+    tags:
+      # EC2 tags required for cluster-autoscaler auto-discovery
+      k8s.io/cluster-autoscaler/enabled: "true"
+      k8s.io/cluster-autoscaler/gitpod: "owned"
+
+      # GPU autoscale tags
+      k8s.io/cluster-autoscaler/node-template/taint/dedicated: nvidia.com/gpu=true
+      k8s.io/cluster-autoscaler/node-template/label/nvidia.com/gpu: 'true'
+
+    labels:
+      nvidia.com/gpu: 'true'
+      k8s.amazonaws.com/accelerator: nvidia-tesla
+      gitpod.io/workload_workspace_services: "true"
+      gitpod.io/workload_workspace_regular: "true"
+      gitpod.io/workload_workspace_headless: "true"
+
+    iam:
+      attachPolicyARNs:
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+        - arn:aws:iam::aws:policy/ElasticLoadBalancingFullAccess
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      withAddonPolicies:
+        albIngress: true
+        autoScaler: true
+        cloudWatch: true
+        certManager: true
+        ebs: true
+
+    spot: false
+    instanceTypes: ["p2.xlarge"]
+
+
+  - name: services
+    desiredCapacity: 1
+    minSize: 1
+    maxSize: 3
+    # because of AWS addons
+    disableIMDSv1: false
+    # Please configure the size of the volume and additional features
+    # https://eksctl.io/usage/schema/#nodeGroups-volumeType
+    # https://aws.amazon.com/es/ebs/pricing/
+    volumeSize: 100
+    volumeType: gp3
+    volumeIOPS: 6000
+    volumeThroughput: 500
+    maxPodsPerNode: 110
+    ebsOptimized: true
+    ssh:
+      enableSsm: true
+    privateNetworking: true
+    #ami: ami-0e943cccd22ffc3d4
+
+    tags:
+      # EC2 tags required for cluster-autoscaler auto-discovery
+      k8s.io/cluster-autoscaler/enabled: "true"
+      k8s.io/cluster-autoscaler/gitpod: "owned"
+    iam:
+      attachPolicyARNs:
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+        - arn:aws:iam::aws:policy/ElasticLoadBalancingFullAccess
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      withAddonPolicies:
+        albIngress: true
+        autoScaler: true
+        cloudWatch: true
+        certManager: true
+        ebs: true
+
+    # Using custom AMI images require the definition of overrideBootstrapCommand
+    # to ensure that nodes are able to join the cluster https://eksctl.io/usage/custom-ami-support/
+    labels:
+      gitpod.io/workload_meta: "true"
+      gitpod.io/workload_ide: "true"
+      gitpod.io/workload_workspace_headless: "true"
+
+    spot: false
+    instanceTypes: ["m6i.xlarge", "m6i.2xlarge"]
